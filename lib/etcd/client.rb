@@ -6,6 +6,7 @@ require 'net/https'
 require 'json'
 require 'etcd/log'
 require 'etcd/stats'
+require 'etcd/cluster'
 require 'etcd/keys'
 require 'etcd/exceptions'
 require 'etcd/mod/lock'
@@ -26,6 +27,7 @@ module Etcd
     HTTP_CLIENT_ERROR = ->(r) { r.is_a? Net::HTTPClientError }
 
     include Stats
+    include Cluster
     include Keys
     include Mod::Lock
     include Mod::Leader
@@ -37,7 +39,7 @@ module Etcd
     def_delegators :@config, :user_name, :password, :allow_redirect
 
 
-    attr_reader :host, :port, :http, :config
+    attr_reader :host, :port, :http, :config, :peer_port
 
     ##
     # Creates an Etcd::Client object. It accepts a hash +opts+ as argument
@@ -50,6 +52,7 @@ module Etcd
     def initialize(opts = {})
       @host = opts[:host] || '127.0.0.1'
       @port = opts[:port] || 4001
+      @peer_port = opts[:peer_port] || 7001
       @config = Config.new
       @config.read_timeout = opts[:read_timeout] || 60
       @config.allow_redirect = opts.key?(:allow_redirect) ? opts[:allow_redirect] : true
@@ -104,7 +107,7 @@ module Etcd
         fail "Unknown http action: #{method}"
       end
       timeout = options[:timeout] || @read_timeout
-      http = Net::HTTP.new(host, port)
+      http = options[:cluster] ? Net::HTTP.new(host, peer_port) : Net::HTTP.new(host, port)
       http.read_timeout = timeout
       setup_https(http)
       req.basic_auth(user_name, password) if [user_name, password].all?
